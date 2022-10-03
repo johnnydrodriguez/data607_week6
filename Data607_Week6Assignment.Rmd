@@ -1,0 +1,124 @@
+---
+title: "Data607_Week6Assignment"
+author: "Johnny Rodriguez"
+date: "2022-10-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,  warning = FALSE, message = FALSE)
+```
+<br/>
+
+#### Setup the enviroment and importing the CSV
+The untidy CSV data is imported from the Github Repo.  To make transformations easier downstream, empty strings were converted to NA values.
+
+
+```{r}
+
+#Load the libraries
+library (dplyr)
+library(tidyr)
+
+#Import the CSV
+mydata <- read.csv("https://raw.githubusercontent.com/johnnydrodriguez/data607_week6/main/untidycsv.csv", na.strings=c("","NA"))
+knitr::kable(mydata)
+
+```
+<br/>
+
+#### Tiday Data Transformation
+
+A series of transformations were applied to convert the untidy data to a tidy format.
+
+```{r}
+
+#Converts data to a table for ease in piping.
+mydata <- tibble::as_tibble(mydata)
+
+#Renames columns.
+mydata <- mydata %>% 
+  rename(Airline = X, Status = X.1)
+
+#Fill missing values in Airline column using preceding value.
+mydata <- mydata %>%
+  fill(Airline)
+
+#Removes row with NA value in Status column
+mydata <- mydata %>% 
+  na.omit(Status)
+
+#Converts the individual destination columns into a long table.
+mytidydata <- mydata %>% 
+  gather("Destinations", "Count",  3:7)
+knitr::kable(mytidydata)
+
+#Converts the long table into a wider one by assigning to Status values into its own columnns
+mytidydata <- mytidydata %>% 
+  spread("Status", "Count")
+knitr::kable(mytidydata)
+
+```
+<br/>
+
+#### Delayed Flights Analysis
+
+There were two methods used to calculate the ratio of delayed flights by Airline. The first method calculated the delay ratio for each airline per destination.  To perform this step, the total number of flights per airline, per destination was calculated and then the ratio of delays over total flights to that destination was derived.
+
+
+
+```{r}
+
+#Build columns for calculation
+mytidydata <- mytidydata %>% 
+  mutate(allflights = rowSums(across(c('delayed', 'on time')))) %>% 
+  mutate(delay_ratio = delayed / allflights)
+
+knitr::kable(mytidydata)
+
+```
+
+<br/>
+
+#### Per Destination, Alaska Airlines is delayed less often
+The data is summarized to take the average of the delay ratios for all of the destinations.  That is, sum up all ratios per destination and then divide by the number of destinations.
+
+Alaska Airline's delay ratio mean is 11.1%.  AM West's delay ratio is 17.7%.
+
+```{r}
+
+AirlineRates <- mytidydata %>% 
+  group_by(Airline) %>% 
+  summarise(final = mean(delay_ratio)) %>% 
+  arrange(final)
+
+knitr::kable(AirlineRates)
+
+```
+<br/>
+
+#### But when totaling number of flights, AM WEST is delayed less often
+The second method to calculate this ratio is to sum the total number of flights and sum the total number of delays and derive the delay ratio using the two totals.
+
+This method takes the table and sums the number flights and then the number of delays to create a new column of totals used to calculate the ratio.
+
+Using this method, AM West has a 10.8% delay rate.  Alaska Airlines has a delay rate of 13.2%
+```{r}
+
+TotalRates <- mytidydata %>%
+  group_by(Airline) %>% 
+  summarise(Totalflights = sum(allflights), Totaldelays = sum(delayed)) %>% 
+  mutate(ALLdelay_ratio = Totaldelays / Totalflights) %>% 
+  arrange(ALLdelay_ratio)
+
+knitr::kable(TotalRates)
+
+```
+<br/>
+
+#### Conclusion  - Which is correct?
+
+In this case, it is unclear.  This data represents an example of Simpson's Paradox - where patterns/trends that appear in groups of data reverse or disappear when combined.  In this case, the pattern of better delay rates for Alaska Airlines that appear when calculated per destination disappear when the values are calculated using the total number of flights and the total number of delays. Likely there are unknown/confounding variables not available in this data.  Perhaps weather, distances, type of planes, and airport variables also play a role in the delays.
+
+
+Source: https://en.wikipedia.org/wiki/Simpson%27s_paradox
